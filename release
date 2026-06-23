@@ -2,13 +2,15 @@
 
 set -o pipefail
 
+USERNAME="${APPLE_ID:?'Set APPLE_ID environment variable (Apple Developer email)'}"
+TEAM="${TEAM_ID:?'Set TEAM_ID environment variable (Apple Developer Team ID)'}"
+
 if [ ! "$PASSWORD" ]; then
-    echo set app-specific password in PASSWORD env var
+    echo "Set app-specific password in PASSWORD env var"
+    echo "Generate one at https://appleid.apple.com/account/manage"
     exit 1
 fi
 
-USERNAME=takeshi.sone@gmail.com
-TEAM=42LGPQYC7M
 APPNAME=BLEUnlock
 
 BASEDIR=$(cd $(dirname $0); pwd)
@@ -56,6 +58,7 @@ test -d $TMPDIR || mkdir -p $TMPDIR
 xcodebuild \
    -scheme $APPNAME \
    -archivePath $RELEASEDIR/$APPNAME.xcarchive \
+   BLEUNLOCK_INCREMENT_BUILD_NUMBER=YES \
    archive
 
 xcodebuild \
@@ -74,3 +77,10 @@ ditto -c -k --keepParent $RELEASEDIR/$APPNAME.app $RELEASEDIR/$APPNAME-$version.
 v=$version-$(extract_info $RELEASEDIR/$APPNAME.app CFBundleVersion)
 mkdir -p archives/$v
 cp -a "$RELEASEDIR/$APPNAME.xcarchive" archives/$v
+
+echo ""
+echo "=== Release Validation ==="
+codesign --verify --deep --strict --verbose=2 $RELEASEDIR/$APPNAME.app
+xcrun stapler validate $RELEASEDIR/$APPNAME.app
+spctl --assess --type execute --verbose $RELEASEDIR/$APPNAME.app
+echo "=== All validations passed ==="
