@@ -262,7 +262,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
             pressEvent?.post(tap: .cghidEventTap)
             CGEvent(keyboardEventSource: src, virtualKey: 49, keyDown: false)?.post(tap: .cghidEventTap)
         }
-        
+
         // Return key
         CGEvent(keyboardEventSource: src, virtualKey: 52, keyDown: true)?.post(tap: .cghidEventTap)
         CGEvent(keyboardEventSource: src, virtualKey: 52, keyDown: false)?.post(tap: .cghidEventTap)
@@ -298,7 +298,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
             guard self.isScreenLocked() else { return }
             guard let password = self.fetchPassword(warn: true) else { return }
             
-            print("Entering password")
             self.unlockedAt = Date().timeIntervalSince1970
             self.fakeKeyStrokes(password)
             self.playNowPlaying()
@@ -396,11 +395,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     func storePassword(_ password: String) {
         let pw = password.data(using: .utf8)!
         
+        guard let access = SecAccessControlCreateWithFlags(
+            kCFAllocatorDefault,
+            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            [],
+            nil
+        ) else {
+            errorModal("Failed to create Keychain access control")
+            return
+        }
+
         let query: [String: Any] = [
             String(kSecClass): kSecClassGenericPassword,
             String(kSecAttrAccount): NSUserName(),
             String(kSecAttrService): Bundle.main.bundleIdentifier ?? "BLEUnlock",
             String(kSecAttrLabel): "BLEUnlock",
+            String(kSecAttrAccessControl): access,
             String(kSecValueData): pw,
         ]
         SecItemDelete(query as CFDictionary)
@@ -424,7 +434,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
         var item: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if (status == errSecItemNotFound) {
-            print("Password is not stored")
             if warn {
                 errorModal(t("password_not_set"))
             }
@@ -498,6 +507,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     
     @objc func setUnlockRSSI(_ menuItem: NSMenuItem) {
         let value = menuItem.tag
+        if value != ble.UNLOCK_DISABLED && ble.unlockRSSI == ble.UNLOCK_DISABLED {
+            let alert = NSAlert()
+            alert.messageText = t("auto_unlock_warning_title")
+            alert.informativeText = t("auto_unlock_warning_body")
+            alert.addButton(withTitle: t("ok"))
+            alert.addButton(withTitle: t("cancel"))
+            alert.alertStyle = .warning
+            alert.window.title = "BLEUnlock"
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            if fetchPassword() == nil {
+                askPassword()
+                guard fetchPassword() != nil else { return }
+            }
+        }
         prefs.set(value, forKey: "unlockRSSI")
         ble.unlockRSSI = value
     }
@@ -720,7 +744,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
         dnc.addObserver(self, selector: #selector(onScreensaverStop), name: NSNotification.Name(rawValue: "com.apple.screensaver.didstop"), object: nil)
 
         if ble.unlockRSSI != ble.UNLOCK_DISABLED && !prefs.bool(forKey: "wakeWithoutUnlocking") && fetchPassword() == nil {
-            askPassword()
+            if prefs.string(forKey: "device") != nil {
+                askPassword()
+            } else {
+                prefs.set(true, forKey: "wakeWithoutUnlocking")
+                ble.unlockRSSI = ble.UNLOCK_DISABLED
+                prefs.set(ble.UNLOCK_DISABLED, forKey: "unlockRSSI")
+            }
         }
         checkAccessibility()
         checkUpdate()

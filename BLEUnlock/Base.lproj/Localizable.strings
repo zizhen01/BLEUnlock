@@ -1,4 +1,6 @@
 "about" = "About BLEUnlock";
+"auto_unlock_warning_body" = "Auto-unlock types your macOS password using synthetic keyboard events. This is NOT equivalent to Apple's secure Auto Unlock.\n\nAnyone who can spoof your BLE device or intercept keyboard events could unlock your Mac.\n\nYour password will be stored in Keychain with device-only access.\n\nDo you want to enable auto-unlock?";
+"auto_unlock_warning_title" = "Security Warning: Auto-Unlock";
 "bluetooth_power_warn" = "Bluetooth is turned off. For BLEUnlock to work, turn it on.";
 "cancel" = "Cancel";
 "closer" = "⬆Closer";
